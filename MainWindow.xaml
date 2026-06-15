@@ -5,7 +5,7 @@
   xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
   Title="RecNet Patcher"
   Width="500"
-  Height="650"
+  Height="645"
   MinWidth="500"
   MaxWidth="500"
   MinHeight="420"
@@ -85,7 +85,7 @@
         </Grid>
       </Border>
 
-      <Grid Grid.Row="1" Margin="24,24,24,10">
+      <Grid Grid.Row="1" Margin="10,24,10,10">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
           <RowDefinition Height="Auto" />
