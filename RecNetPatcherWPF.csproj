@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>RecNetPatcherWPF</AssemblyName>
+    <RootNamespace>RecNetPatcherWPF</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile
+      Include="..\RecNetPatcher\CustomMetadataPatcher.cs"
+      Link="Patcher\CustomMetadataPatcher.cs"
+    />
+    <Compile Include="..\RecNetPatcher\DllPatcher.cs" Link="Patcher\DllPatcher.cs" />
+    <Compile Include="..\RecNetPatcher\PatcherConstants.cs" Link="Patcher\PatcherConstants.cs" />
+    <Compile Include="..\RecNetPatcher\PhotonPatcher.cs" Link="Patcher\PhotonPatcher.cs" />
+    <Compile
+      Include="..\RecNetPatcher\StandardMetadataPatcher.cs"
+      Link="Patcher\StandardMetadataPatcher.cs"
+    />
+  </ItemGroup>
+</Project>

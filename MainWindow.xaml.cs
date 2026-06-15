@@ -1,0 +1,316 @@
+using System.Text;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using Microsoft.Win32;
+using RecNetPatcher;
+
+namespace RecNetPatcherWPF;
+
+public partial class MainWindow : Window
+{
+    private PatchMode _mode = PatchMode.Metadata;
+    private string? _inputPath;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        ApplyMode();
+    }
+
+    private void ModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        _mode = sender switch
+        {
+            Button button when button == MetadataButton => PatchMode.Metadata,
+            Button button when button == DllButton => PatchMode.Dll,
+            _ => PatchMode.Photon,
+        };
+
+        ApplyMode();
+    }
+
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ButtonState == MouseButtonState.Pressed)
+            DragMove();
+    }
+
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private void WindowClipHost_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is not FrameworkElement root)
+            return;
+
+        root.Clip = new RectangleGeometry(
+            new Rect(0, 0, root.ActualWidth, root.ActualHeight),
+            12,
+            12
+        );
+    }
+
+    private void DropZone_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        OpenFileDialog dialog = new()
+        {
+            CheckFileExists = true,
+            Filter = GetInputFilter(),
+            Title = "Select input file",
+        };
+
+        if (dialog.ShowDialog(this) == true)
+            SetInput(dialog.FileName);
+    }
+
+    private void DropZone_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void DropZone_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+            SetInput(files[0]);
+    }
+
+    private void PatchButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_inputPath) || !File.Exists(_inputPath))
+            return;
+
+        SaveFileDialog dialog = new()
+        {
+            FileName = BuildDefaultOutputName(_inputPath),
+            Filter = GetOutputFilter(),
+            OverwritePrompt = true,
+            Title = "Select output file",
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            PatchButton.IsEnabled = false;
+            Mouse.OverrideCursor = Cursors.Wait;
+            List<string> log = Patch(_inputPath, dialog.FileName);
+        }
+        catch (Exception ex)
+            when (ex
+                    is InvalidOperationException
+                        or IOException
+                        or UnauthorizedAccessException
+                        or ArgumentException
+            ) { }
+        finally
+        {
+            Mouse.OverrideCursor = null;
+            PatchButton.IsEnabled = true;
+        }
+    }
+
+    private List<string> Patch(string inputPath, string outputPath)
+    {
+        return _mode switch
+        {
+            PatchMode.Metadata => PatchMetadata(inputPath, outputPath, ReplacementUrlTextBox.Text),
+            PatchMode.Dll => PatchDll(inputPath, outputPath, ReplacementUrlTextBox.Text),
+            PatchMode.Photon => PatchPhoton(inputPath, outputPath),
+            _ => throw new InvalidOperationException("Unknown patch mode."),
+        };
+    }
+
+    private static List<string> PatchMetadata(
+        string inputPath,
+        string outputPath,
+        string replacement
+    )
+    {
+        byte[] data = ReadAllBytesShared(inputPath);
+        byte[] oldBytes = Encoding.UTF8.GetBytes(PatcherConstants.MetadataUrl);
+        byte[] newBytes = Encoding.UTF8.GetBytes(replacement.Trim());
+
+        if (newBytes.Length == 0)
+            throw new InvalidOperationException("Replacement URL cannot be empty.");
+
+        List<string> log = [];
+        bool isStandardMetadata =
+            StandardMetadataPatcher.ReadU32(data, 0) == PatcherConstants.StandardMetadataMagic;
+        bool patched = isStandardMetadata
+            ? StandardMetadataPatcher.TryPatch(ref data, oldBytes, newBytes, log)
+            : CustomMetadataPatcher.TryPatch(ref data, oldBytes, newBytes, log);
+
+        if (!patched)
+            throw new InvalidOperationException(
+                $"Could not find a patchable {PatcherConstants.MetadataUrl} entry."
+            );
+
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
+        File.WriteAllBytes(outputPath, data);
+        return log;
+    }
+
+    private static List<string> PatchDll(string inputPath, string outputPath, string replacement)
+    {
+        List<string> log = [];
+        bool patched = DllPatcher.TryPatch(inputPath, outputPath, replacement.Trim(), log);
+
+        if (!patched)
+            throw new InvalidOperationException(
+                "Could not find a patchable ns.rec.net or recroom.againstgrav.com string."
+            );
+
+        return log;
+    }
+
+    private List<string> PatchPhoton(string inputPath, string outputPath)
+    {
+        string[] replacements = [PhotonTopTextBox.Text.Trim(), PhotonBottomTextBox.Text.Trim()];
+
+        if (replacements.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException("Both replacement Photon IDs are required.");
+
+        string[] originals = GetOriginalPhotonIds();
+        byte[] data = ReadAllBytesShared(inputPath);
+        List<string> log = [];
+
+        bool patched = PhotonPatcher.TryPatch(ref data, originals, replacements, log);
+
+        if (!patched)
+            throw new InvalidOperationException("Could not find patchable Photon IDs.");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
+        File.WriteAllBytes(outputPath, data);
+        return log;
+    }
+
+    private string[] GetOriginalPhotonIds()
+    {
+        string top = OriginalPhotonTopTextBox.Text.Trim();
+        string bottom = OriginalPhotonBottomTextBox.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(top) && string.IsNullOrWhiteSpace(bottom))
+            return PatcherConstants.RecRoomPhotonIds;
+
+        if (string.IsNullOrWhiteSpace(top) || string.IsNullOrWhiteSpace(bottom))
+            throw new InvalidOperationException(
+                "Provide both original Photon IDs, or leave both original fields empty."
+            );
+
+        return [top, bottom];
+    }
+
+    private static byte[] ReadAllBytesShared(string path)
+    {
+        using FileStream stream = new(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete
+        );
+
+        byte[] data = new byte[stream.Length];
+        int read = 0;
+
+        while (read < data.Length)
+        {
+            int count = stream.Read(data, read, data.Length - read);
+
+            if (count == 0)
+                throw new EndOfStreamException($"Unexpected EOF while reading {path}");
+
+            read += count;
+        }
+
+        return data;
+    }
+
+    private void ApplyMode()
+    {
+        UrlPanel.Visibility = _mode == PatchMode.Photon ? Visibility.Collapsed : Visibility.Visible;
+        PhotonPanel.Visibility =
+            _mode == PatchMode.Photon ? Visibility.Visible : Visibility.Collapsed;
+
+        SetModeButton(MetadataButton, _mode == PatchMode.Metadata);
+        SetModeButton(DllButton, _mode == PatchMode.Dll);
+        SetModeButton(PhotonButton, _mode == PatchMode.Photon);
+
+        if (string.IsNullOrWhiteSpace(_inputPath))
+            ResetInputPrompt();
+    }
+
+    private static void SetModeButton(Button button, bool active)
+    {
+        button.Background = active
+            ? (Brush)Application.Current.Resources["SelectedBrush"]
+            : (Brush)Application.Current.Resources["PanelBrush"];
+        button.Foreground = active
+            ? (Brush)Application.Current.Resources["SelectedTextBrush"]
+            : (Brush)Application.Current.Resources["TextBrush"];
+    }
+
+    private void SetInput(string path)
+    {
+        _inputPath = path;
+        InputTitle.Text = Path.GetFileName(path);
+        InputPathText.Text = path;
+    }
+
+    private void ResetInputPrompt()
+    {
+        InputTitle.Text = _mode switch
+        {
+            PatchMode.Metadata => "Drop global-metadata.dat here",
+            PatchMode.Dll => "Drop Assembly-CSharp.dll here",
+            PatchMode.Photon => "Drop resources.assets here",
+            _ => "Drop input file here",
+        };
+        InputPathText.Text = "or click to browse";
+    }
+
+    private string GetInputFilter()
+    {
+        return _mode switch
+        {
+            PatchMode.Dll => "DLL files (*.dll)|*.dll|All files (*.*)|*.*",
+            PatchMode.Metadata => "Metadata files (*.dat;*.bin)|*.dat;*.bin|All files (*.*)|*.*",
+            _ => "All files (*.*)|*.*",
+        };
+    }
+
+    private string GetOutputFilter()
+    {
+        return _mode == PatchMode.Dll
+            ? "DLL files (*.dll)|*.dll|All files (*.*)|*.*"
+            : "All files (*.*)|*.*";
+    }
+
+    private static string BuildDefaultOutputName(string inputPath)
+    {
+        string directory = Path.GetDirectoryName(inputPath) ?? "";
+        string fileName = Path.GetFileNameWithoutExtension(inputPath);
+        string extension = Path.GetExtension(inputPath);
+
+        return Path.Combine(directory, $"{fileName}.patched{extension}");
+    }
+
+    private enum PatchMode
+    {
+        Metadata,
+        Dll,
+        Photon,
+    }
+}
