@@ -89,14 +89,15 @@
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
           <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <Grid Grid.Row="1" Margin="0,0,0,20">
           <Grid.ColumnDefinitions>
-            <ColumnDefinition />
-            <ColumnDefinition />
-            <ColumnDefinition />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="48" />
           </Grid.ColumnDefinitions>
 
           <Button
@@ -129,12 +130,23 @@
             Click="ModeButton_Click"
           >
             <Button.Tag>
+              <CornerRadius />
+            </Button.Tag>
+          </Button>
+          <Button
+            x:Name="PresetsButton"
+            Grid.Column="3"
+            Style="{StaticResource ActionButtonStyle}"
+            Click="PresetsButton_Click"
+          >
+            <Button.Tag>
               <CornerRadius TopRight="8" BottomRight="8" />
             </Button.Tag>
+            <TextBlock Text="&#xE838;" FontFamily="Segoe MDL2 Assets" FontSize="18" />
           </Button>
         </Grid>
 
-        <StackPanel Grid.Row="2">
+        <StackPanel x:Name="EditorPanel" Grid.Row="2">
           <Border
             x:Name="DropZone"
             Height="126"
@@ -198,6 +210,39 @@
             </Button.Tag>
           </Button>
         </StackPanel>
+
+        <Grid x:Name="PresetsPanel" Grid.Row="2" Visibility="Collapsed">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+
+          <ScrollViewer
+            Grid.Row="0"
+            VerticalScrollBarVisibility="Auto"
+            HorizontalScrollBarVisibility="Disabled"
+            CanContentScroll="False"
+          >
+            <StackPanel x:Name="PresetListPanel" />
+          </ScrollViewer>
+
+          <StackPanel Grid.Row="1" Margin="0,14,0,0" VerticalAlignment="Bottom">
+            <Label Content="Preset name" />
+            <TextBox x:Name="PresetNameTextBox" />
+            <Button
+              x:Name="CreatePresetButton"
+              Content="Create Preset"
+              Margin="0,14,0,0"
+              Height="40"
+              Style="{StaticResource ActionButtonStyle}"
+              Click="CreatePresetButton_Click"
+            >
+              <Button.Tag>
+                <CornerRadius TopLeft="8" TopRight="8" BottomRight="8" BottomLeft="8" />
+              </Button.Tag>
+            </Button>
+          </StackPanel>
+        </Grid>
       </Grid>
     </Grid>
 

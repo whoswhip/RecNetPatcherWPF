@@ -1,4 +1,7 @@
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -10,6 +13,12 @@ namespace RecNetPatcherWPF;
 
 public partial class MainWindow : Window
 {
+    private static readonly JsonSerializerOptions PresetJsonOptions = new()
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() },
+    };
+
     private PatchMode _mode = PatchMode.Metadata;
     private string? _inputPath;
 
@@ -28,6 +37,7 @@ public partial class MainWindow : Window
             _ => PatchMode.Photon,
         };
 
+        HidePresets();
         ApplyMode();
     }
 
@@ -244,9 +254,11 @@ public partial class MainWindow : Window
         PhotonPanel.Visibility =
             _mode == PatchMode.Photon ? Visibility.Visible : Visibility.Collapsed;
 
-        SetModeButton(MetadataButton, _mode == PatchMode.Metadata);
-        SetModeButton(DllButton, _mode == PatchMode.Dll);
-        SetModeButton(PhotonButton, _mode == PatchMode.Photon);
+        bool presetsVisible = PresetsPanel.Visibility == Visibility.Visible;
+        SetModeButton(MetadataButton, !presetsVisible && _mode == PatchMode.Metadata);
+        SetModeButton(DllButton, !presetsVisible && _mode == PatchMode.Dll);
+        SetModeButton(PhotonButton, !presetsVisible && _mode == PatchMode.Photon);
+        SetModeButton(PresetsButton, presetsVisible);
 
         if (string.IsNullOrWhiteSpace(_inputPath))
             ResetInputPrompt();
@@ -314,4 +326,213 @@ public partial class MainWindow : Window
         Dll,
         Photon,
     }
+
+    private void PresetsButton_Click(object sender, RoutedEventArgs e)
+    {
+        ShowPresets();
+    }
+
+    private void CreatePresetButton_Click(object sender, RoutedEventArgs e)
+    {
+        string presetName = PresetNameTextBox.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(presetName))
+            return;
+
+        Directory.CreateDirectory(GetPresetsDirectory());
+
+        Preset preset = CreatePresetFromFields(presetName);
+        string path = Path.Combine(
+            GetPresetsDirectory(),
+            $"{SanitizePresetFileName(presetName)}.json"
+        );
+        string json = JsonSerializer.Serialize(preset, PresetJsonOptions);
+
+        File.WriteAllText(path, json);
+        PresetNameTextBox.Clear();
+        RefreshPresetList();
+    }
+
+    private void ShowPresets()
+    {
+        EditorPanel.Visibility = Visibility.Collapsed;
+        PresetsPanel.Visibility = Visibility.Visible;
+        RefreshPresetList();
+        ApplyMode();
+    }
+
+    private void HidePresets()
+    {
+        EditorPanel.Visibility = Visibility.Visible;
+        PresetsPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void RefreshPresetList()
+    {
+        PresetListPanel.Children.Clear();
+
+        string presetsDirectory = GetPresetsDirectory();
+        if (!Directory.Exists(presetsDirectory))
+        {
+            PresetListPanel.Children.Add(CreateEmptyPresetText());
+            return;
+        }
+
+        string[] presetFiles =
+        [
+            .. Directory
+                .GetFiles(presetsDirectory, "*.json")
+                .OrderBy(Path.GetFileNameWithoutExtension, StringComparer.OrdinalIgnoreCase),
+        ];
+
+        if (presetFiles.Length == 0)
+        {
+            PresetListPanel.Children.Add(CreateEmptyPresetText());
+            return;
+        }
+
+        foreach (string presetFile in presetFiles)
+        {
+            Preset? preset = TryReadPreset(presetFile);
+            if (preset is null)
+                continue;
+
+            PresetListPanel.Children.Add(CreatePresetRow(presetFile, preset));
+        }
+
+        if (PresetListPanel.Children.Count == 0)
+            PresetListPanel.Children.Add(CreateEmptyPresetText());
+    }
+
+    private Border CreatePresetRow(string presetFile, Preset preset)
+    {
+        Border container = new()
+        {
+            Margin = new Thickness(0, 0, 0, 8),
+            Padding = new Thickness(8),
+            Background = (Brush)Application.Current.Resources["InputBrush"],
+            BorderBrush = (Brush)Application.Current.Resources["BorderBrush"],
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+        };
+
+        Grid row = new();
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        StackPanel textPanel = new();
+        textPanel.Children.Add(
+            new TextBlock
+            {
+                Text = string.IsNullOrWhiteSpace(preset.Name)
+                    ? Path.GetFileNameWithoutExtension(presetFile)
+                    : preset.Name,
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+            }
+        );
+
+        Button loadButton = new()
+        {
+            Content = "Load",
+            Width = 86,
+            Height = 30,
+            Style = (Style)Application.Current.Resources["ActionButtonStyle"],
+            Tag = new CornerRadius(8),
+        };
+        loadButton.Click += (_, _) => LoadPreset(preset);
+
+        Grid.SetColumn(textPanel, 0);
+        Grid.SetColumn(loadButton, 1);
+        row.Children.Add(textPanel);
+        row.Children.Add(loadButton);
+
+        container.Child = row;
+        return container;
+    }
+
+    private static TextBlock CreateEmptyPresetText()
+    {
+        return new TextBlock
+        {
+            Text = "No presets found.",
+            Foreground = (Brush)Application.Current.Resources["MutedTextBrush"],
+            FontSize = 12,
+        };
+    }
+
+    private void LoadPreset(Preset preset)
+    {
+        ReplacementUrlTextBox.Text = preset.ReplacementUrl;
+        PhotonTopTextBox.Text = preset.ReplacementIds.Top;
+        PhotonBottomTextBox.Text = preset.ReplacementIds.Bottom;
+        OriginalPhotonTopTextBox.Text = preset.OriginalIds.Top;
+        OriginalPhotonBottomTextBox.Text = preset.OriginalIds.Bottom;
+
+        HidePresets();
+        ApplyMode();
+    }
+
+    private Preset CreatePresetFromFields(string presetName)
+    {
+        return new Preset
+        {
+            Name = presetName,
+            ReplacementUrl = ReplacementUrlTextBox.Text,
+            ReplacementIds = new PhotonIds
+            {
+                Top = PhotonTopTextBox.Text,
+                Bottom = PhotonBottomTextBox.Text,
+            },
+            OriginalIds = new PhotonIds
+            {
+                Top = OriginalPhotonTopTextBox.Text,
+                Bottom = OriginalPhotonBottomTextBox.Text,
+            },
+        };
+    }
+
+    private static Preset? TryReadPreset(string path)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<Preset>(File.ReadAllText(path), PresetJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    private static string GetPresetsDirectory()
+    {
+        return Path.Combine(AppContext.BaseDirectory, "Presets");
+    }
+
+    private static string SanitizePresetFileName(string presetName)
+    {
+        string sanitized = Sanitize().Replace(presetName, "_").Trim();
+        return string.IsNullOrWhiteSpace(sanitized) ? "Preset" : sanitized;
+    }
+
+    private sealed class Preset
+    {
+        public string Name { get; set; } = "";
+        public string ReplacementUrl { get; set; } = "https://ns.rec.net";
+        public PhotonIds ReplacementIds { get; set; } = new();
+        public PhotonIds OriginalIds { get; set; } = new();
+    }
+
+    private sealed class PhotonIds
+    {
+        public string Top { get; set; } = "";
+        public string Bottom { get; set; } = "";
+    }
+
+    [GeneratedRegex("""[<>:""/\\|?*\x00-\x1F]""")]
+    private static partial Regex Sanitize();
 }
