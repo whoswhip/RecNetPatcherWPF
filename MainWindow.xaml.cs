@@ -265,7 +265,7 @@ public partial class MainWindow : Window
             MinHeight = 645;
             Height = 645;
         }
-        else if (_mode != PatchMode.Photon)
+        else if (_mode != PatchMode.Photon || presetsVisible)
             MinHeight = 420;
 
         if (string.IsNullOrWhiteSpace(_inputPath))
