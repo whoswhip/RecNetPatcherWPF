@@ -286,7 +286,8 @@ public partial class MainWindow : Window
         return _mode switch
         {
             PatchMode.Dll => "DLL files (*.dll)|*.dll|All files (*.*)|*.*",
-            PatchMode.Metadata => "Metadata files (*.dat;*.bin)|*.dat;*.bin|All files (*.*)|*.*",
+            PatchMode.Metadata => "Metadata files (*.dat;*.assets)|*.dat;*.bin|All files (*.*)|*.*",
+            PatchMode.Photon => "Photon Files (*.assets;*.dat)|*.assets;*.bin|All files (*.*)|*.*",
             _ => "All files (*.*)|*.*",
         };
     }
