@@ -7,6 +7,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>RecNetPatcherWPF</AssemblyName>
     <RootNamespace>RecNetPatcherWPF</RootNamespace>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,16 +15,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile
-      Include="..\RecNetPatcher\CustomMetadataPatcher.cs"
-      Link="Patcher\CustomMetadataPatcher.cs"
-    />
+    <Compile Include="..\RecNetPatcher\CustomMetadataPatcher.cs" Link="Patcher\CustomMetadataPatcher.cs" />
     <Compile Include="..\RecNetPatcher\DllPatcher.cs" Link="Patcher\DllPatcher.cs" />
     <Compile Include="..\RecNetPatcher\PatcherConstants.cs" Link="Patcher\PatcherConstants.cs" />
     <Compile Include="..\RecNetPatcher\PhotonPatcher.cs" Link="Patcher\PhotonPatcher.cs" />
-    <Compile
-      Include="..\RecNetPatcher\StandardMetadataPatcher.cs"
-      Link="Patcher\StandardMetadataPatcher.cs"
-    />
+    <Compile Include="..\RecNetPatcher\StandardMetadataPatcher.cs" Link="Patcher\StandardMetadataPatcher.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="icon.ico" />
   </ItemGroup>
 </Project>
