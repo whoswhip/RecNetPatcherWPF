@@ -261,12 +261,11 @@ public partial class MainWindow : Window
         SetModeButton(PresetsButton, presetsVisible);
 
         if (_mode == PatchMode.Photon && Height < 645)
-        {
-            MinHeight = 645;
             Height = 645;
-        }
         else if (_mode != PatchMode.Photon || presetsVisible)
             MinHeight = 420;
+        if (_mode == PatchMode.Photon)
+            MinHeight = 645;
 
         if (string.IsNullOrWhiteSpace(_inputPath))
             ResetInputPrompt();
