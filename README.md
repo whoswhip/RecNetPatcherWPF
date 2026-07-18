@@ -1,3 +1,6 @@
+# This repository has been merged into [RecNetPatcher](https://github.com/whoswhip/RecNetPatcher). 
+All future updates will be made there. Please use that repository for any issues or pull requests.
+
 # RecNet Patcher WPF
 This is a GUI version of [RecNetPatcher](https://github.com/whoswhip/RecNetPatcher) made in WPF.
 
